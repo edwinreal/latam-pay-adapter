@@ -1,0 +1,43 @@
+// Esquema de Auditoría Inmutable para latam-pay-adapter
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// RAP: Registro de Accesos y Permisos
+model AccessAuditRAP {
+  id              String   @id @default(uuid())
+  actorId         String   // Quién ejecutó la acción
+  targetId        String   // Sobre quién se ejecutó
+  action          String   // LOGIN, PERMISSION_CHANGE, SUSPENSION
+  ipAddress       String
+  userAgent       String
+  authorizedBy    String?  // ID del superior que autorizó
+  createdAt       DateTime @default(now())
+  metadata        Json?    // Detalles adicionales del cambio
+}
+
+// RDR: Registro de Descargas de Reportes
+model ReportDownloadRDR {
+  id              String   @id @default(uuid())
+  userId          String   // Quién descargó
+  reportType      String   // LEDGER_CSV, FORENSIC_JSON, R38
+  rowCount        Int
+  ipAddress       String
+  purpose         String   // Justificación de la descarga
+  downloadedAt    DateTime @default(now())
+  hash            String   // Hash SHA-256 de los datos descargados para integridad
+}
+
+model Account {
+  id              String   @id
+  name            String
+  level           Int      @default(1)
+  status          String   @default("ACTIVE") // ACTIVE, SUSPENDED, LOCKED
+  createdAt       DateTime @default(now())
+}

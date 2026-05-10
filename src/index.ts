@@ -10,6 +10,8 @@ export * from './security/SecurityInterceptor.js';
 export * from './security/IStorage.js';
 export * from './services/AdminService.js';
 export * from './utils/ReportGenerator.js';
+export * from './governance/IRoles.js';
+export * from './governance/GovernanceEngine.js';
 export * from './errors/PaymentError.js';
 export * from './errors/SecurityBreachException.js';
 
