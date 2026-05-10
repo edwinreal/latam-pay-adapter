@@ -1,4 +1,4 @@
-import { IPaymentAdapter, IPaymentRequest, IPaymentResponse } from '../interfaces/IPayment';
+import type { IPaymentAdapter, IPaymentRequest, IPaymentResponse } from '../interfaces/IPayment.js';
 
 export class KushkiAdapter implements IPaymentAdapter {
     name = 'Kushki';

@@ -1,16 +1,16 @@
-export * from './interfaces/IPayment';
-export * from './interfaces/ICustomer';
-export * from './adapters/MercadoPagoAdapter';
-export * from './adapters/PayUAdapter';
-export * from './adapters/KushkiAdapter';
-export * from './constants';
-export * from './utils';
+export * from './interfaces/IPayment.js';
+export * from './interfaces/ICustomer.js';
+export * from './adapters/MercadoPagoAdapter.js';
+export * from './adapters/PayUAdapter.js';
+export * from './adapters/KushkiAdapter.js';
+export * from './constants/index.js';
+export * from './utils/index.js';
 
 // Example of a Factory Pattern to get the right adapter
-import { MercadoPagoAdapter } from './adapters/MercadoPagoAdapter';
-import { PayUAdapter } from './adapters/PayUAdapter';
-import { KushkiAdapter } from './adapters/KushkiAdapter';
-import { IPaymentAdapter } from './interfaces/IPayment';
+import { MercadoPagoAdapter } from './adapters/MercadoPagoAdapter.js';
+import { PayUAdapter } from './adapters/PayUAdapter.js';
+import { KushkiAdapter } from './adapters/KushkiAdapter.js';
+import type { IPaymentAdapter } from './interfaces/IPayment.js';
 
 export type AdapterType = 'mercadopago' | 'payu' | 'kushki';
 

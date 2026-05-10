@@ -1,4 +1,4 @@
-import { ICustomer } from './ICustomer';
+import type { ICustomer } from './ICustomer.js';
 
 export type PaymentStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 

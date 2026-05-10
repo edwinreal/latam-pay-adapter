@@ -1,17 +1,29 @@
 {
   "name": "latam-pay-adapter",
   "version": "1.0.0",
-  "main": "index.js",
-  "directories": {
-    "test": "tests"
-  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "payment",
+    "adapter",
+    "latam",
+    "mercadopago",
+    "payu",
+    "kushki",
+    "fintech"
+  ],
+  "author": "Edwin Realpe",
+  "license": "MIT",
+  "description": "A unified payment adapter library for Latin American gateways.",
   "devDependencies": {
     "@types/node": "^25.6.2",
     "ts-node": "^10.9.2",
