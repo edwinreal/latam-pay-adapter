@@ -8,6 +8,8 @@ export * from './utils/index.js';
 export * from './security/SecurityVault.js';
 export * from './security/SecurityInterceptor.js';
 export * from './security/IStorage.js';
+export * from './services/AdminService.js';
+export * from './utils/ReportGenerator.js';
 export * from './errors/PaymentError.js';
 export * from './errors/SecurityBreachException.js';
 
