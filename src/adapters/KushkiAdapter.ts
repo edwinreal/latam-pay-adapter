@@ -13,7 +13,7 @@ export class KushkiAdapter implements IPaymentAdapter {
     async createPayment(request: StandardPaymentData): Promise<IPaymentResponse> {
         const interceptor = new SecurityInterceptor();
         
-        interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
+        await interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
 
         console.log(`[${this.name}] Procesando transacción para ${request.amount} ${request.currency}`);
         return {

@@ -15,7 +15,7 @@ export class PayUAdapter implements IPaymentAdapter {
     async createPayment(request: StandardPaymentData): Promise<IPaymentResponse> {
         const interceptor = new SecurityInterceptor();
         
-        interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
+        await interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
 
         try {
             // "TRADUCCIÓN" al formato de PayU

@@ -1,5 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
 import { PaymentError, PaymentErrorCode } from '../errors/PaymentError.js';
+import { InMemoryStorage } from './IStorage.js';
+import type { IStorage } from './IStorage.js';
 
 export interface IHandshake {
     keyA: string;      
@@ -9,20 +11,17 @@ export interface IHandshake {
 
 export class SecurityVault {
     private static instance: SecurityVault;
-    private usedKeys: Map<string, number> = new Map(); // keyA -> timestamp (para idempotencia)
-    private lockedAccounts: Set<string> = new Set();
+    private storage: IStorage;
     private readonly secret: Buffer;
-    private readonly algorithm = 'aes-256-gcm'; // CAMBIO A GCM (Cifrado Autenticado)
+    private readonly algorithm = 'aes-256-gcm';
 
     private constructor() {
         const rawSecret = process.env.LATAM_PAY_VAULT_SECRET;
-        
-        // AUDITORÍA: Prohibir secretos por defecto en producción
         if (!rawSecret || rawSecret.length < 32) {
-            throw new Error('[FATAL] LATAM_PAY_VAULT_SECRET no definido o muy corto. La seguridad no puede ser comprometida.');
+            throw new Error('[FATAL] LATAM_PAY_VAULT_SECRET insuficiente.');
         }
-        
         this.secret = createHash('sha256').update(rawSecret).digest();
+        this.storage = new InMemoryStorage();
     }
 
     public static getInstance(): SecurityVault {
@@ -32,65 +31,60 @@ export class SecurityVault {
         return SecurityVault.instance;
     }
 
-    public generateSecureHandshake(accountId: string, ttlMs: number = 300000): IHandshake {
-        if (this.lockedAccounts.has(accountId)) {
+    public async generateSecureHandshake(accountId: string, ttlMs: number = 300000): Promise<IHandshake> {
+        if (await this.isLocked(accountId)) {
             throw new PaymentError(PaymentErrorCode.ACCOUNT_LOCKED, null, 'Cuenta suspendida.');
         }
 
         const keyA = randomBytes(16).toString('hex');
-        const iv = randomBytes(12); // GCM recomienda 12 bytes de IV
+        const iv = randomBytes(12);
         const cipher = createCipheriv(this.algorithm, this.secret, iv) as any;
         
         const adnPayload = JSON.stringify({ accountId, keyA, ts: Date.now() });
         let encryptedAdn = cipher.update(adnPayload, 'utf8', 'hex');
         encryptedAdn += cipher.final('hex');
-        
-        // Obtenemos el Authentication Tag (Solo en GCM)
         const authTag = cipher.getAuthTag().toString('hex');
 
-        // Formato: IV : TAG : DATA
         const keyB = `${iv.toString('hex')}:${authTag}:${encryptedAdn}`;
 
-        return {
-            keyA,
-            keyB,
-            expiresAt: Date.now() + ttlMs
-        };
+        return { keyA, keyB, expiresAt: Date.now() + ttlMs };
     }
 
     public decryptAdn(keyB: string): { accountId: string, keyA: string } {
         try {
             const [ivHex, tagHex, encryptedData] = keyB.split(':');
-            if (!ivHex || !tagHex || !encryptedData) throw new Error();
-
             const iv = Buffer.from(ivHex, 'hex');
             const tag = Buffer.from(tagHex, 'hex');
             const decipher = createDecipheriv(this.algorithm, this.secret, iv) as any;
-            
-            decipher.setAuthTag(tag); // Validamos la integridad del mensaje
-            
+            decipher.setAuthTag(tag);
             let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
             decrypted += decipher.final('utf8');
-
             return JSON.parse(decrypted);
         } catch (e) {
-            throw new Error('FALLO_INTEGRIDAD_ADN: La llave ha sido manipulada o el secreto es incorrecto.');
+            throw new Error('FALLO_INTEGRIDAD_ADN');
         }
     }
 
-    public burn(keyA: string): void {
-        this.usedKeys.set(keyA, Date.now());
+    public async burn(keyA: string): Promise<void> {
+        await this.storage.set(`burned:${keyA}`, Date.now().toString());
+        await this.storage.add(keyA);
     }
 
-    public isBurned(keyA: string): boolean {
-        return this.usedKeys.has(keyA);
+    public async getBurnedTimestamp(keyA: string): Promise<number | null> {
+        const ts = await this.storage.get(`burned:${keyA}`);
+        return ts ? parseInt(ts, 10) : null;
     }
 
-    public lockAccount(accountId: string): void {
-        this.lockedAccounts.add(accountId);
+    public async isBurned(keyA: string): Promise<boolean> {
+        return await this.storage.has(keyA);
     }
 
-    public isLocked(accountId: string): boolean {
-        return this.lockedAccounts.has(accountId);
+    public async lockAccount(accountId: string): Promise<void> {
+        await this.storage.add(`lock:${accountId}`);
+        console.error(`[ACTIVE DEFENSE] Cuenta ${accountId} SUSPENDIDA.`);
+    }
+
+    public async isLocked(accountId: string): Promise<boolean> {
+        return await this.storage.has(`lock:${accountId}`);
     }
 }

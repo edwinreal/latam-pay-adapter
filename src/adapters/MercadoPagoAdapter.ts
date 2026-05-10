@@ -15,7 +15,7 @@ export class MercadoPagoAdapter implements IPaymentAdapter {
         const interceptor = new SecurityInterceptor();
         
         // El "ADN Check" (Lanza excepción si falla)
-        interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
+        await interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
 
         console.log(`[${this.name}] Procesando pago seguro de ${request.amount} ${request.currency}`);
 

@@ -1,58 +1,54 @@
 import { SecurityVault } from './SecurityVault.js';
 import type { IHandshake } from './SecurityVault.js';
+import type { IStorage } from './IStorage.js';
 import { SecurityBreachException } from '../errors/SecurityBreachException.js';
 
 export class SecurityInterceptor {
     private vault: SecurityVault;
+    private readonly IDEMPOTENCY_WINDOW_MS = 5000; // 5 segundos para reintentos de red
 
     constructor() {
         this.vault = SecurityVault.getInstance();
     }
 
-    /**
-     * El Corazón de la Validación (ADN Check)
-     */
-    public validateTransaction(handshake: IHandshake, sessionAccountId: string, ip: string = 'unknown'): void {
-        // 1. Verificamos si la cuenta ya está suspendida
-        if (this.vault.isLocked(sessionAccountId)) {
-            throw new Error('ACCOUNT_SUSPENDED: Su cuenta está bajo investigación de seguridad.');
+    public async validateTransaction(handshake: IHandshake, sessionAccountId: string, ip: string = 'unknown'): Promise<void> {
+        // 1. Verificar bloqueo de cuenta
+        if (await this.vault.isLocked(sessionAccountId)) {
+            throw new Error('ACCOUNT_SUSPENDED: Su cuenta está bajo investigación.');
         }
 
-        // 2. Verificamos si el token ya fue quemado
-        if (this.vault.isBurned(handshake.keyA)) {
-            throw new Error('TOKEN_ALREADY_BURNED: Intento de reuso detectado.');
-        }
+        // 2. ADN CHECK inicial (necesario para verificar la identidad antes de cualquier lógica)
+        const dna = this.vault.decryptAdn(handshake.keyB);
 
-        try {
-            // 3. EXTRAER ADN OCULTO (Decodificación)
-            const dna = this.vault.decryptAdn(handshake.keyB);
-
-            // 4. LA TRAMPA: Verificamos si el ADN de la llave coincide con la cuenta activa
-            if (dna.accountId !== sessionAccountId || dna.keyA !== handshake.keyA) {
-                // FALLO DE IDENTIDAD: Ejecutamos Protocolo de Defensa Activa
-                this.executeDefenseProtocol(handshake, sessionAccountId, ip, 'Account ID DNA Mismatch');
+        // 3. LOGICA DE IDEMPOTENCIA (Anti-Falsos Positivos)
+        if (await this.vault.isBurned(handshake.keyA)) {
+            const burnedAt = await this.vault.getBurnedTimestamp(handshake.keyA);
+            
+            // Si fue quemado hace muy poco Y la identidad coincide, es un reintento de red
+            if (burnedAt && (Date.now() - burnedAt < this.IDEMPOTENCY_WINDOW_MS)) {
+                if (dna.accountId === sessionAccountId) {
+                    console.warn(`[SecurityInterceptor] Reintento de red detectado (Idempotencia). Ignorando duplicado.`);
+                    return; // Permitimos pasar sin re-quemar ni bloquear
+                }
             }
 
-            // Si todo está bien, la llave se quema inmediatamente tras este uso
-            this.vault.burn(handshake.keyA);
-            console.log(`[SecurityInterceptor] ADN Validado para la cuenta: ${sessionAccountId}. Llave incinerada.`);
-
-        } catch (error: any) {
-            if (error instanceof SecurityBreachException) throw error;
-            
-            // Error en decodificación = Llave manipulada
-            this.executeDefenseProtocol(handshake, sessionAccountId, ip, 'Token Tampering Detected');
+            // Si no cumple la ventana, es un ataque de repetición real
+            await this.executeDefenseProtocol(handshake, sessionAccountId, ip, 'Replay Attack Detected (Outside Idempotency Window)');
         }
+
+        // 4. VALIDACIÓN DE ADN FINAL
+        if (dna.accountId !== sessionAccountId || dna.keyA !== handshake.keyA) {
+            await this.executeDefenseProtocol(handshake, sessionAccountId, ip, 'Account ID DNA Mismatch');
+        }
+
+        // TODO OK: Incinerar llave
+        await this.vault.burn(handshake.keyA);
+        console.log(`[SecurityInterceptor] ADN Validado. Llave incinerada para: ${sessionAccountId}.`);
     }
 
-    private executeDefenseProtocol(handshake: IHandshake, accountId: string, ip: string, reason: string): void {
-        // 1. Quemamos la llave inmediatamente
-        this.vault.burn(handshake.keyA);
-        
-        // 2. Bloqueamos la cuenta original por seguridad (Defensa Activa)
-        this.vault.lockAccount(accountId);
-        
-        // 3. Reportamos el intento de robo con excepción personalizada
+    private async executeDefenseProtocol(handshake: IHandshake, accountId: string, ip: string, reason: string): Promise<void> {
+        await this.vault.burn(handshake.keyA);
+        await this.vault.lockAccount(accountId);
         throw new SecurityBreachException(accountId, ip, reason);
     }
 }

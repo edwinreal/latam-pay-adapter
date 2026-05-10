@@ -7,6 +7,7 @@ export * from './constants/index.js';
 export * from './utils/index.js';
 export * from './security/SecurityVault.js';
 export * from './security/SecurityInterceptor.js';
+export * from './security/IStorage.js';
 export * from './errors/PaymentError.js';
 export * from './errors/SecurityBreachException.js';
 
