@@ -3,6 +3,7 @@ export interface ICustomer {
     email: string;
     firstName: string;
     lastName: string;
+    document: string; // Documento de identidad (DNI, CC, RFC)
     identification?: {
         type: string;
         number: string;

@@ -5,8 +5,9 @@ export * from './adapters/PayUAdapter.js';
 export * from './adapters/KushkiAdapter.js';
 export * from './constants/index.js';
 export * from './utils/index.js';
+export * from './security/SecurityVault.js';
+export * from './errors/PaymentError.js';
 
-// Example of a Factory Pattern to get the right adapter
 import { MercadoPagoAdapter } from './adapters/MercadoPagoAdapter.js';
 import { PayUAdapter } from './adapters/PayUAdapter.js';
 import { KushkiAdapter } from './adapters/KushkiAdapter.js';
@@ -14,8 +15,14 @@ import type { IPaymentAdapter } from './interfaces/IPayment.js';
 
 export type AdapterType = 'mercadopago' | 'payu' | 'kushki';
 
-export class PaymentAdapterFactory {
-    static getAdapter(type: AdapterType): IPaymentAdapter {
+/**
+ * El Gestor de Adaptadores (Fábrica con API Fluida)
+ */
+export class PaymentAdapter {
+    /**
+     * Permite una sintaxis fluida: PaymentAdapter.use('payu').createPayment(...)
+     */
+    static use(type: AdapterType): IPaymentAdapter {
         switch (type) {
             case 'mercadopago':
                 return new MercadoPagoAdapter();

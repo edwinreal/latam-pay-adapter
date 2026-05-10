@@ -1,16 +1,28 @@
-import type { IPaymentAdapter, IPaymentRequest, IPaymentResponse } from '../interfaces/IPayment.js';
+import { SecurityVault } from '../security/SecurityVault.js';
+import type { 
+    IPaymentAdapter, 
+    StandardPaymentData, 
+    IPaymentResponse, 
+    IRefundRequest, 
+    IRefundResponse 
+} from '../interfaces/IPayment.js';
 
 export class KushkiAdapter implements IPaymentAdapter {
     name = 'Kushki';
 
-    async createPayment(request: IPaymentRequest): Promise<IPaymentResponse> {
-        console.log(`[${this.name}] Executing payment for ${request.amount} ${request.currency}`);
+    async createPayment(request: StandardPaymentData): Promise<IPaymentResponse> {
+        const vault = SecurityVault.getInstance();
+        
+        if (!vault.validateAndBurn(request.handshake)) {
+            throw new Error('[Security] Transacción rechazada: Token Kushki inválido o ya quemado.');
+        }
+
+        console.log(`[${this.name}] Procesando transacción para ${request.amount} ${request.currency}`);
         return {
             id: `kushki_${Math.random().toString(36).substr(2, 9)}`,
             status: 'approved',
             amount: request.amount,
             currency: request.currency,
-            externalReference: request.externalReference,
             rawResponse: { source: 'Kushki Mock' }
         };
     }
@@ -21,7 +33,17 @@ export class KushkiAdapter implements IPaymentAdapter {
             status: 'approved',
             amount: 0,
             currency: 'USD',
-            rawResponse: { source: 'Kushki Mock' }
+            rawResponse: {}
+        };
+    }
+
+    async refundPayment(request: IRefundRequest): Promise<IRefundResponse> {
+        console.log(`[${this.name}] Ejecutando reembolso Kushki para ${request.paymentId}`);
+        return {
+            id: `ref_kushki_${request.paymentId}`,
+            status: 'completed',
+            amount: request.amount || 0,
+            rawResponse: {}
         };
     }
 }
