@@ -1,5 +1,8 @@
 import { PaymentAdapter, SecurityVault, PaymentErrorCode } from './index.js';
 
+// Simulamos la configuración del servidor / variable de entorno
+process.env.LATAM_PAY_VAULT_SECRET = 'super_secret_key_for_audit_compliance_32_chars';
+
 async function demonstrateOffensiveSecurity() {
     const vault = SecurityVault.getInstance();
     

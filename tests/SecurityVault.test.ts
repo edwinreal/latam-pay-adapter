@@ -1,3 +1,4 @@
+process.env.LATAM_PAY_VAULT_SECRET = 'test_secret_key_32_chars_long_!!';
 import { SecurityVault } from '../src/security/SecurityVault.js';
 import { PaymentErrorCode } from '../src/errors/PaymentError.js';
 

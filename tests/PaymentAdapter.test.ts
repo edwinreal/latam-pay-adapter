@@ -1,3 +1,4 @@
+process.env.LATAM_PAY_VAULT_SECRET = 'test_secret_key_32_chars_long_!!';
 import { PaymentAdapter, SecurityVault } from '../src/index.js';
 
 describe('PaymentAdapter & Factory', () => {
