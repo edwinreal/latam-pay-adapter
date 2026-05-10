@@ -13,7 +13,7 @@ export class KushkiAdapter implements IPaymentAdapter {
     async createPayment(request: StandardPaymentData): Promise<IPaymentResponse> {
         const vault = SecurityVault.getInstance();
         
-        if (!vault.validateAndBurn(request.handshake)) {
+        if (!vault.validateAndBurn(request.handshake, request.sessionContext.accountId, request.sessionContext.ip)) {
             throw new Error('[Security] Transacción rechazada: Token Kushki inválido o ya quemado.');
         }
 

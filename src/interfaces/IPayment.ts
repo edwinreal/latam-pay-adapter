@@ -12,6 +12,10 @@ export interface StandardPaymentData {
     description: string;
     customer: ICustomer;
     handshake: IHandshake;
+    sessionContext: {
+        accountId: string;
+        ip: string;
+    };
     externalReference?: string;
     metadata?: Record<string, any>;
 }
