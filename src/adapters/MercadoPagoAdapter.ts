@@ -1,4 +1,4 @@
-import { SecurityVault } from '../security/SecurityVault.js';
+import { SecurityInterceptor } from '../security/SecurityInterceptor.js';
 import { ErrorMapper, PaymentError } from '../errors/PaymentError.js';
 import type { 
     IPaymentAdapter, 
@@ -12,11 +12,12 @@ export class MercadoPagoAdapter implements IPaymentAdapter {
     name = 'MercadoPago';
 
     async createPayment(request: StandardPaymentData): Promise<IPaymentResponse> {
-        const vault = SecurityVault.getInstance();
+        const interceptor = new SecurityInterceptor();
         
-        if (!vault.validateAndBurn(request.handshake, request.sessionContext.accountId, request.sessionContext.ip)) {
-            throw new Error('[Security] Transacción rechazada: Token ya utilizado.');
-        }
+        // El "ADN Check" (Lanza excepción si falla)
+        interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
+
+        console.log(`[${this.name}] Procesando pago seguro de ${request.amount} ${request.currency}`);
 
         try {
             // "TRADUCCIÓN" al formato de Mercado Pago

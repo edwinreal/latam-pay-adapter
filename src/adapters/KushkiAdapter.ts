@@ -1,4 +1,4 @@
-import { SecurityVault } from '../security/SecurityVault.js';
+import { SecurityInterceptor } from '../security/SecurityInterceptor.js';
 import type { 
     IPaymentAdapter, 
     StandardPaymentData, 
@@ -11,11 +11,9 @@ export class KushkiAdapter implements IPaymentAdapter {
     name = 'Kushki';
 
     async createPayment(request: StandardPaymentData): Promise<IPaymentResponse> {
-        const vault = SecurityVault.getInstance();
+        const interceptor = new SecurityInterceptor();
         
-        if (!vault.validateAndBurn(request.handshake, request.sessionContext.accountId, request.sessionContext.ip)) {
-            throw new Error('[Security] Transacción rechazada: Token Kushki inválido o ya quemado.');
-        }
+        interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
 
         console.log(`[${this.name}] Procesando transacción para ${request.amount} ${request.currency}`);
         return {

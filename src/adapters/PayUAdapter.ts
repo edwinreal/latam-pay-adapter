@@ -1,4 +1,4 @@
-import { SecurityVault } from '../security/SecurityVault.js';
+import { SecurityInterceptor } from '../security/SecurityInterceptor.js';
 import { ErrorMapper } from '../errors/PaymentError.js';
 import { toCents } from '../utils/index.js';
 import type { 
@@ -13,18 +13,16 @@ export class PayUAdapter implements IPaymentAdapter {
     name = 'PayU';
 
     async createPayment(request: StandardPaymentData): Promise<IPaymentResponse> {
-        const vault = SecurityVault.getInstance();
+        const interceptor = new SecurityInterceptor();
         
-        if (!vault.validateAndBurn(request.handshake, request.sessionContext.accountId, request.sessionContext.ip)) {
-            throw new Error('[Security] Transacción rechazada: Token ya utilizado.');
-        }
+        interceptor.validateTransaction(request.handshake, request.sessionContext.accountId, request.sessionContext.ip);
 
         try {
-            // "TRADUCCIÓN" al formato de PayU (Ejemplo: usa centavos)
+            // "TRADUCCIÓN" al formato de PayU
             const payuPayload = {
                 transaction: {
                     order: {
-                        amount: toCents(request.amount), // TRADUCCIÓN A CENTAVOS
+                        amount: toCents(request.amount),
                         currency: request.currency,
                         buyer: {
                             fullName: `${request.customer.firstName} ${request.customer.lastName}`,

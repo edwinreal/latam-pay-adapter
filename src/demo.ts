@@ -1,16 +1,14 @@
-import { PaymentAdapter, SecurityVault } from './index.js';
-import { PaymentErrorCode } from './errors/PaymentError.js';
+import { PaymentAdapter, SecurityVault, PaymentErrorCode } from './index.js';
 
 async function demonstrateOffensiveSecurity() {
     const vault = SecurityVault.getInstance();
-    const adapter = PaymentAdapter.use('mercadopago');
-
-    console.log('--- ESCENARIO: INTENTO DE USO DE TOKEN ROBADO ---');
     
-    // 1. Un atacante roba un handshake generado legítimamente para la Cuenta A
+    console.log('--- ESCENARIO: INTENTO DE USO DE TOKEN ROBADO (ADN CHECK) ---');
+    
+    // 1. Generamos un handshake legítimo para el Cliente A
     const legitimateAccountId = 'CLIENTE_LEGITIMO_001';
-    const stolenHandshake = vault.generateHandshake(legitimateAccountId);
-    console.log(`Token robado de la cuenta: ${legitimateAccountId}`);
+    const stolenHandshake = vault.generateSecureHandshake(legitimateAccountId);
+    console.log(`Token generado con ADN oculto de: ${legitimateAccountId}`);
 
     // 2. El atacante intenta usar ese token en su propia sesión (Cuenta B)
     const attackerAccountId = 'ATACANTE_HACKER_999';
@@ -19,13 +17,13 @@ async function demonstrateOffensiveSecurity() {
     console.log(`\nAtacante intenta pagar en la sesión: ${attackerAccountId}...`);
 
     try {
-        await adapter.createPayment({
+        await PaymentAdapter.use('mercadopago').createPayment({
             amount: 5000,
             currency: 'USD',
             description: 'Compra Fraudulenta',
             handshake: stolenHandshake,
             sessionContext: {
-                accountId: attackerAccountId, // DISCREPANCIA DETECTADA AQUÍ
+                accountId: attackerAccountId, // DISCREPANCIA DE ADN
                 ip: attackerIp
             },
             customer: {
@@ -37,20 +35,12 @@ async function demonstrateOffensiveSecurity() {
         });
     } catch (error: any) {
         if (error.code === PaymentErrorCode.SECURITY_VIOLATION) {
-            console.error('\n!!! ALERTA DE SEGURIDAD !!!');
+            console.error('\n!!! ALERTA DE SEGURIDAD DISPARADA POR INTERCEPTOR !!!');
             console.error('Mensaje:', error.message);
             
-            // 3. Verificar que las cuentas están bloqueadas
-            console.log('\n--- ESTADO DEL SISTEMA TRAS EL ATAQUE ---');
-            const logs = vault.getAuditLogs();
-            console.log('Logs de Auditoría Generados:', JSON.stringify(logs, null, 2));
-            
-            try {
-                console.log('\nIntentando generar un nuevo handshake para el atacante...');
-                vault.generateHandshake(attackerAccountId);
-            } catch (e: any) {
-                console.log('Resultado:', e.message); // Debería decir que la cuenta está bloqueada
-            }
+            console.log('\n--- VERIFICANDO DEFENSA ACTIVA ---');
+            console.log(`¿Cuenta del atacante bloqueada?: ${vault.isLocked(attackerAccountId)}`);
+            console.log(`¿Token quemado?: ${vault.isBurned(stolenHandshake.keyA)}`);
         } else {
             console.error('Error inesperado:', error);
         }

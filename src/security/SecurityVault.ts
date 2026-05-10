@@ -1,30 +1,23 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
 import { PaymentError, PaymentErrorCode } from '../errors/PaymentError.js';
 
 export interface IHandshake {
-    keyA: string;      // Public Token
-    keyB: string;      // Signature (Linked to keyA + accountId)
-    accountId: string; // Inmutable Account Identifier
+    keyA: string;      // Token público
+    keyB: string;      // "ADN de Llave": accountId cifrado + firma
     expiresAt: number;
-}
-
-export interface AuditLog {
-    timestamp: number;
-    accountId: string;
-    action: string;
-    details: any;
-    severity: 'LOW' | 'HIGH' | 'CRITICAL';
 }
 
 export class SecurityVault {
     private static instance: SecurityVault;
     private usedKeys: Set<string> = new Set();
     private lockedAccounts: Set<string> = new Set();
-    private auditLogs: AuditLog[] = [];
-    private readonly secret: string;
+    private readonly secret: Buffer;
+    private readonly algorithm = 'aes-256-cbc';
 
     private constructor() {
-        this.secret = process.env.LATAM_PAY_VAULT_SECRET || randomBytes(32).toString('hex');
+        // Derivamos una clave de 32 bytes de nuestro secreto de entorno
+        const rawSecret = process.env.LATAM_PAY_VAULT_SECRET || 'default_secret_key_32_chars_long!!';
+        this.secret = createHash('sha256').update(rawSecret).digest();
     }
 
     public static getInstance(): SecurityVault {
@@ -35,93 +28,65 @@ export class SecurityVault {
     }
 
     /**
-     * Generación de Llave con Hash Vinculado a la Cuenta
+     * Generación de Llave con ADN Oculto (Account Identity Anchoring)
      */
-    public generateHandshake(accountId: string, ttlMs: number = 300000): IHandshake {
+    public generateSecureHandshake(accountId: string, ttlMs: number = 300000): IHandshake {
         if (this.lockedAccounts.has(accountId)) {
-            throw new PaymentError(PaymentErrorCode.ACCOUNT_LOCKED, null, 'Esta cuenta ha sido bloqueada por violaciones de seguridad.');
+            throw new PaymentError(PaymentErrorCode.ACCOUNT_LOCKED, null, 'Cuenta suspendida.');
         }
 
         const keyA = randomBytes(16).toString('hex');
-        const keyB = this.signKey(keyA, accountId);
+        const iv = randomBytes(16);
+        const cipher = createCipheriv(this.algorithm, this.secret, iv);
         
+        // El ADN incluye el accountId y la keyA para vinculación total
+        const adnPayload = JSON.stringify({ accountId, keyA, ts: Date.now() });
+        let encryptedAdn = cipher.update(adnPayload, 'utf8', 'hex');
+        encryptedAdn += cipher.final('hex');
+
+        // La keyB es el IV + el ADN cifrado (formato legible para transporte)
+        const keyB = `${iv.toString('hex')}:${encryptedAdn}`;
+
         return {
             keyA,
             keyB,
-            accountId,
             expiresAt: Date.now() + ttlMs
         };
     }
 
     /**
-     * Protocolo de Bloqueo (Circuit Breaker) e Integridad de Cuenta
+     * El "ADN Check": Extrae la identidad oculta en la llave
      */
-    public validateAndBurn(handshake: IHandshake, sessionAccountId: string, ip: string = 'unknown'): boolean {
-        // 1. Verificar si la cuenta ya está bloqueada
-        if (this.lockedAccounts.has(sessionAccountId)) {
-            throw new PaymentError(PaymentErrorCode.ACCOUNT_LOCKED);
-        }
+    public decryptAdn(keyB: string): { accountId: string, keyA: string } {
+        try {
+            const [ivHex, encryptedData] = keyB.split(':');
+            if (!ivHex || !encryptedData) throw new Error();
 
-        // 2. Validador de Integridad de Cuenta (IAB)
-        // El accountID del token DEBE coincidir con el de la sesión activa
-        if (handshake.accountId !== sessionAccountId) {
-            this.triggerCircuitBreaker(handshake, sessionAccountId, ip, 'ACCOUNT_MISMATCH');
-            return false;
-        }
+            const iv = Buffer.from(ivHex, 'hex');
+            const decipher = createDecipheriv(this.algorithm, this.secret, iv);
+            let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+            decrypted += decipher.final('utf8');
 
-        // 3. Verificar caducidad y re-uso
-        if (Date.now() > handshake.expiresAt || this.usedKeys.has(handshake.keyA)) {
-            this.usedKeys.add(handshake.keyA); // Aseguramos que se queme
-            return false;
+            return JSON.parse(decrypted);
+        } catch (e) {
+            throw new Error('FALLO_DECRIPT_ADN: Llave corrupta o manipulada.');
         }
-
-        // 4. Verificar firma matemática vinculada
-        const expectedKeyB = this.signKey(handshake.keyA, handshake.accountId);
-        if (handshake.keyB !== expectedKeyB) {
-            this.triggerCircuitBreaker(handshake, sessionAccountId, ip, 'SIGNATURE_VIOLATION');
-            return false;
-        }
-
-        // TODO OK: Quemar llave y permitir acceso
-        this.usedKeys.add(handshake.keyA);
-        return true;
     }
 
-    private triggerCircuitBreaker(handshake: IHandshake, sessionAccountId: string, ip: string, reason: string): void {
-        // A. Quemar la llave de inmediato
-        this.usedKeys.add(handshake.keyA);
-
-        // B. BLOQUEAR CUENTA DEL CLIENTE
-        this.lockedAccounts.add(sessionAccountId);
-        this.lockedAccounts.add(handshake.accountId);
-
-        // C. GENERAR LOG DE AUDITORÍA FORENSE
-        const log: AuditLog = {
-            timestamp: Date.now(),
-            accountId: sessionAccountId,
-            action: 'SECURITY_LOCKOUT',
-            severity: 'CRITICAL',
-            details: {
-                reason,
-                attemptedAccountId: handshake.accountId,
-                ipAddress: ip,
-                tokenKeyA: handshake.keyA
-            }
-        };
-        this.auditLogs.push(log);
-        
-        console.error(`[CIRCUIT BREAKER] Violación de Seguridad Detectada: ${reason}. Cuentas bloqueadas y auditoría generada.`);
-        
-        throw new PaymentError(PaymentErrorCode.SECURITY_VIOLATION, log, 'Protocolo de seguridad activado. Su acceso ha sido revocado.');
+    public burn(keyA: string): void {
+        this.usedKeys.add(keyA);
     }
 
-    private signKey(key: string, accountId: string): string {
-        return createHmac('sha256', this.secret)
-            .update(`${key}:${accountId}`) // Vinculamos la llave con el ID de cuenta
-            .digest('hex');
+    public isBurned(keyA: string): boolean {
+        return this.usedKeys.has(keyA);
     }
 
-    public getAuditLogs(): AuditLog[] {
-        return [...this.auditLogs];
+    public lockAccount(accountId: string): void {
+        this.lockedAccounts.add(accountId);
+        console.error(`[ACTIVE DEFENSE] Cuenta ${accountId} ha sido SUSPENDIDA.`);
+    }
+
+    public isLocked(accountId: string): boolean {
+        return this.lockedAccounts.has(accountId);
     }
 }
